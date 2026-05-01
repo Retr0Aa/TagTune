@@ -40,7 +40,7 @@ public class AudioFileProcessor {
     }
 
     public static AudioMetadata extractMetadata(File file) {
-        String title = "", artist = "", date = "";
+        String title = "", artist = "", album = "", year = "", track = "", genre = "", comment = "", composer = "", disc = "";
         ImageIcon icon = null;
         ImageIcon largeIcon = null;
         try {
@@ -49,7 +49,14 @@ public class AudioFileProcessor {
             if (tag != null) {
                 title = tag.getFirst(FieldKey.TITLE);
                 artist = tag.getFirst(FieldKey.ARTIST);
-                date = tag.getFirst(FieldKey.YEAR);
+                album = tag.getFirst(FieldKey.ALBUM);
+                year = cleanYear(tag.getFirst(FieldKey.YEAR));
+                track = tag.getFirst(FieldKey.TRACK);
+                genre = tag.getFirst(FieldKey.GENRE);
+                comment = tag.getFirst(FieldKey.COMMENT);
+                composer = tag.getFirst(FieldKey.COMPOSER);
+                disc = tag.getFirst(FieldKey.DISC_NO);
+                
                 Artwork art = tag.getFirstArtwork();
                 if (art != null) {
                     BufferedImage img = ImageIO.read(new ByteArrayInputStream(art.getBinaryData()));
@@ -60,10 +67,20 @@ public class AudioFileProcessor {
                 }
             }
         } catch (Exception ignored) {}
-        return new AudioMetadata(file.getName(), file.getAbsolutePath(), title, artist, date, icon, largeIcon);
+        return new AudioMetadata(file.getName(), file.getAbsolutePath(), title, artist, album, year, track, genre, comment, composer, disc, icon, largeIcon);
     }
 
-    public static boolean updateMetadata(String filePath, String title, String artist, String date, File newArtwork) {
+    private static String cleanYear(String year) {
+        if (year == null || year.isEmpty()) return "";
+        // If it's a date like 2024-01-01, just take 2024
+        if (year.length() >= 4) {
+            String first4 = year.substring(0, 4);
+            if (first4.matches("\\d{4}")) return first4;
+        }
+        return year;
+    }
+
+    public static boolean updateMetadata(String filePath, String title, String artist, String album, String year, String track, String genre, String comment, String composer, String disc, File newArtwork) {
         try {
             File file = new File(filePath);
             AudioFile f = AudioFileIO.read(file);
@@ -71,7 +88,13 @@ public class AudioFileProcessor {
 
             setSafeField(tag, FieldKey.TITLE, title);
             setSafeField(tag, FieldKey.ARTIST, artist);
-            setSafeField(tag, FieldKey.YEAR, date);
+            setSafeField(tag, FieldKey.ALBUM, album);
+            setSafeField(tag, FieldKey.YEAR, year);
+            setSafeField(tag, FieldKey.TRACK, track);
+            setSafeField(tag, FieldKey.GENRE, genre);
+            setSafeField(tag, FieldKey.COMMENT, comment);
+            setSafeField(tag, FieldKey.COMPOSER, composer);
+            setSafeField(tag, FieldKey.DISC_NO, disc);
             
             if (newArtwork != null && newArtwork.exists()) {
                 try {
@@ -103,7 +126,7 @@ public class AudioFileProcessor {
         }
     }
 
-    public static boolean updateMetadata(String filePath, String title, String artist, String date) {
-        return updateMetadata(filePath, title, artist, date, null);
+    public static boolean updateMetadata(String filePath, String title, String artist, String album, String year, String track, String genre, String comment, String composer, String disc) {
+        return updateMetadata(filePath, title, artist, album, year, track, genre, comment, composer, disc, null);
     }
 }

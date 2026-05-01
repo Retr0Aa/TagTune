@@ -1,6 +1,7 @@
 package org.retr0a.tagtune;
 
 import java.awt.*;
+import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 
 public class ImageUtils {
@@ -12,7 +13,6 @@ public class ImageUtils {
         int w = original.getWidth();
         int h = original.getHeight();
 
-        // Use progressive downscaling for much better quality
         do {
             if (w > targetWidth) {
                 w /= 2;
@@ -40,6 +40,46 @@ public class ImageUtils {
         } while (w != targetWidth || h != targetHeight);
 
         return ret;
+    }
+
+    public static Image applyMacEffects(Image sourceIcon) {
+        int size = 1024;
+        BufferedImage result = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2 = result.createGraphics();
+        
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+
+        // 1. Padding: Native macOS icons are ~80% of the full image size to leave room for shadows/breathing
+        int contentSize = (int) (size * 0.82);
+        int offset = (size - contentSize) / 2;
+        int arc = (int) (contentSize * 0.45); // Standard squircle-like radius
+
+        // 2. Clip to Squircle
+        Shape squircle = new RoundRectangle2D.Float(offset, offset, contentSize, contentSize, arc, arc);
+        g2.setClip(squircle);
+        
+        // Draw the source image
+        g2.drawImage(sourceIcon, offset, offset, contentSize, contentSize, null);
+
+        // 3. "Liquid Glass" effect: Subtle top-to-bottom gloss
+        g2.setClip(null); // Remove clip for the overlay
+        
+        // Outer shadow/border for depth
+        g2.setColor(new Color(0, 0, 0, 40));
+        g2.setStroke(new BasicStroke(2));
+        g2.draw(squircle);
+
+        // Glassy overlay (top half highlight)
+        GradientPaint glass = new GradientPaint(
+            0, offset, new Color(255, 255, 255, 60),
+            0, offset + (contentSize / 2), new Color(255, 255, 255, 0)
+        );
+        g2.setPaint(glass);
+        g2.fill(squircle);
+
+        g2.dispose();
+        return result;
     }
 
     public static Image createAppIcon(int size) {

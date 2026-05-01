@@ -5,18 +5,30 @@ import javax.swing.*;
 public class AudioMetadata {
     public String title;
     public String artistName;
-    public String releaseDate;
+    public String album;
+    public String year;
+    public String trackNumber;
+    public String genre;
+    public String comment;
+    public String composer;
+    public String discNumber;
     public String fileName;
     public String filePath;
     public ImageIcon coverArt;
     public ImageIcon largeCoverArt;
 
-    public AudioMetadata(String fileName, String filePath, String title, String artistName, String releaseDate, ImageIcon coverArt, ImageIcon largeCoverArt) {
+    public AudioMetadata(String fileName, String filePath, String title, String artistName, String album, String year, String trackNumber, String genre, String comment, String composer, String discNumber, ImageIcon coverArt, ImageIcon largeCoverArt) {
         this.fileName = fileName;
         this.filePath = filePath;
         this.title = title;
         this.artistName = artistName;
-        this.releaseDate = releaseDate;
+        this.album = album;
+        this.year = year;
+        this.trackNumber = trackNumber;
+        this.genre = genre;
+        this.comment = comment;
+        this.composer = composer;
+        this.discNumber = discNumber;
         this.coverArt = coverArt;
         this.largeCoverArt = largeCoverArt;
     }

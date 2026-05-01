@@ -4,6 +4,10 @@ import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableCellRenderer;
+import javax.swing.text.AbstractDocument;
+import javax.swing.text.AttributeSet;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.DocumentFilter;
 import java.awt.*;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.event.InputEvent;
@@ -12,20 +16,30 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class Main {
     private static final Set<String> loadedFilePaths = Collections.synchronizedSet(new HashSet<>());
     private static final RecentFoldersManager recentManager = new RecentFoldersManager();
     private static JMenu recentMenu;
     private static JMenuItem saveMenuItem;
-    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd");
     private static File newCoverFile = null;
 
+    private static final String[] COMMON_GENRES = {
+        "", "Rock", "Pop", "Jazz", "Classical", "Hip-Hop", "Electronic", "R&B", "Country", 
+        "Blues", "Reggae", "Metal", "Folk", "Punk", "Soul", "Funk", "Techno", "House", "Ambient"
+    };
+
     public static void main(String[] args) {
+        // Silence noisy jaudiotagger INFO logs that appear red in console
+        Logger.getLogger("org.jaudiotagger").setLevel(Level.WARNING);
+
         System.setProperty("apple.awt.application.name", "TagTune");
         System.setProperty("apple.laf.useScreenMenuBar", "true");
         System.setProperty("com.apple.mrj.application.apple.menu.about.name", "TagTune");
@@ -33,18 +47,33 @@ public class Main {
 
         SwingUtilities.invokeLater(() -> {
             JFrame frame = new JFrame("TagTune");
-            frame.setSize(1000, 750);
+            frame.setSize(1200, 800);
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
             frame.setLayout(new BorderLayout());
 
-            Image appIcon = ImageUtils.createAppIcon(512);
+            // Load app icon from resources and apply native macOS effects
+            Image appIcon = null;
+            try {
+                URL iconUrl = Main.class.getResource("/Icon-iOS-Default-1024x1024@1x.png");
+                if (iconUrl != null) {
+                    Image rawIcon = ImageIO.read(iconUrl);
+                    appIcon = ImageUtils.applyMacEffects(rawIcon);
+                } else {
+                    appIcon = ImageUtils.createAppIcon(512);
+                }
+            } catch (Exception e) {
+                appIcon = ImageUtils.createAppIcon(512);
+            }
+
             frame.setIconImage(appIcon);
             if (Taskbar.isTaskbarSupported()) {
-                try { Taskbar.getTaskbar().setIconImage(appIcon); } catch (Exception ignored) {}
+                try { 
+                    Taskbar.getTaskbar().setIconImage(appIcon); 
+                } catch (Exception ignored) {}
             }
 
             // Table Model
-            String[] columnNames = {"Cover", "File Name", "Title", "Artist Name", "Release Date", "Path"};
+            String[] columnNames = {"Cover", "File Name", "Title", "Artist", "Album", "Year", "Track", "Genre", "Disc", "Composer", "Comment", "Path"};
             DefaultTableModel model = new DefaultTableModel(columnNames, 0) {
                 @Override public boolean isCellEditable(int row, int col) { return false; }
                 @Override public Class<?> getColumnClass(int col) { return col == 0 ? ImageIcon.class : Object.class; }
@@ -52,12 +81,17 @@ public class Main {
 
             // Table UI
             JTable table = createTable(model);
-            table.getColumnModel().removeColumn(table.getColumnModel().getColumn(5)); // Hide Path
+            table.getColumnModel().removeColumn(table.getColumnModel().getColumn(11)); // Hide Path
 
             // Edit Panel
-            JPanel editPanel = new JPanel(new BorderLayout(15, 15));
-            editPanel.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
+            JPanel editPanel = new JPanel(new BorderLayout(15, 10));
+            editPanel.setBorder(BorderFactory.createEmptyBorder(10, 20, 15, 20));
             
+            JLabel lblEditTitle = new JLabel("No file selected - Edit");
+            lblEditTitle.setFont(new Font("SansSerif", Font.BOLD, 15));
+            lblEditTitle.setForeground(new Color(40, 40, 40));
+            editPanel.add(lblEditTitle, BorderLayout.NORTH);
+
             JLabel lblCover = new JLabel();
             lblCover.setPreferredSize(new Dimension(AudioFileProcessor.LARGE_COVER_SIZE, AudioFileProcessor.LARGE_COVER_SIZE));
             lblCover.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY));
@@ -72,36 +106,72 @@ public class Main {
             JLabel lblFileName = new JLabel("File: ");
             lblFileName.setFont(new Font("SansSerif", Font.ITALIC, 11));
             infoPanel.add(lblCover);
-            infoPanel.add(Box.createVerticalStrut(5));
+            infoPanel.add(Box.createVerticalStrut(8));
             infoPanel.add(lblFileName);
 
             JPanel fieldsPanel = new JPanel(new GridBagLayout());
             GridBagConstraints gbc = new GridBagConstraints();
             gbc.fill = GridBagConstraints.HORIZONTAL;
-            gbc.insets = new Insets(5, 8, 5, 8);
+            gbc.insets = new Insets(4, 10, 4, 10);
+            gbc.weightx = 0;
 
-            JTextField tfTitle = new JTextField(30);
-            JTextField tfArtist = new JTextField(30);
+            JTextField tfTitle = new JTextField(20);
+            JTextField tfArtist = new JTextField(20);
+            JTextField tfAlbum = new JTextField(20);
+            JTextField tfYear = new JTextField(10);
+            JTextField tfTrack = new JTextField(10);
             
-            JTextField tfDate = new JTextField(20);
-            tfDate.setEditable(false);
-            JButton btnCalendar = new JButton("📅");
+            JComboBox<String> cbGenre = new JComboBox<>(COMMON_GENRES);
+            cbGenre.setEditable(true);
             
-            JPanel datePanel = new JPanel(new BorderLayout(5, 0));
-            datePanel.add(tfDate, BorderLayout.CENTER);
-            datePanel.add(btnCalendar, BorderLayout.EAST);
+            JTextField tfDisc = new JTextField(10);
+            JTextField tfComposer = new JTextField(20);
+            JTextField tfComment = new JTextField(20);
 
+            // Apply numeric validation
+            applyNumericFilter(tfYear);
+            applyNumericFilter(tfTrack);
+            applyNumericFilter(tfDisc);
+
+            // Row 0
             gbc.gridx = 0; gbc.gridy = 0; fieldsPanel.add(new JLabel("Title:"), gbc);
-            gbc.gridx = 1; fieldsPanel.add(tfTitle, gbc);
-            gbc.gridy = 1; gbc.gridx = 0; fieldsPanel.add(new JLabel("Artist:"), gbc);
-            gbc.gridx = 1; fieldsPanel.add(tfArtist, gbc);
-            gbc.gridy = 2; gbc.gridx = 0; fieldsPanel.add(new JLabel("Release Date:"), gbc);
-            gbc.gridx = 1; fieldsPanel.add(datePanel, gbc);
+            gbc.gridx = 1; gbc.weightx = 1.0; fieldsPanel.add(tfTitle, gbc);
+            gbc.gridx = 2; gbc.weightx = 0;   fieldsPanel.add(new JLabel("Artist:"), gbc);
+            gbc.gridx = 3; gbc.weightx = 1.0; fieldsPanel.add(tfArtist, gbc);
+            
+            // Row 1
+            gbc.gridy = 1;
+            gbc.gridx = 0; gbc.weightx = 0;   fieldsPanel.add(new JLabel("Album:"), gbc);
+            gbc.gridx = 1; gbc.weightx = 1.0; fieldsPanel.add(tfAlbum, gbc);
+            gbc.gridx = 2; gbc.weightx = 0;   fieldsPanel.add(new JLabel("Genre:"), gbc);
+            gbc.gridx = 3; gbc.weightx = 1.0; fieldsPanel.add(cbGenre, gbc);
+            
+            // Row 2
+            gbc.gridy = 2;
+            gbc.gridx = 0; gbc.weightx = 0;   fieldsPanel.add(new JLabel("Year:"), gbc);
+            gbc.gridx = 1; gbc.weightx = 1.0; fieldsPanel.add(tfYear, gbc);
+            gbc.gridx = 2; gbc.weightx = 0;   fieldsPanel.add(new JLabel("Track:"), gbc);
+            gbc.gridx = 3; gbc.weightx = 1.0; fieldsPanel.add(tfTrack, gbc);
+            
+            // Row 3
+            gbc.gridy = 3;
+            gbc.gridx = 0; gbc.weightx = 0;   fieldsPanel.add(new JLabel("Disc #:"), gbc);
+            gbc.gridx = 1; gbc.weightx = 1.0; fieldsPanel.add(tfDisc, gbc);
+            gbc.gridx = 2; gbc.weightx = 0;   fieldsPanel.add(new JLabel("Composer:"), gbc);
+            gbc.gridx = 3; gbc.weightx = 1.0; fieldsPanel.add(tfComposer, gbc);
+            
+            // Row 4
+            gbc.gridy = 4;
+            gbc.gridx = 0; gbc.weightx = 0;   fieldsPanel.add(new JLabel("Comment:"), gbc);
+            gbc.gridx = 1; gbc.gridwidth = 3; fieldsPanel.add(tfComment, gbc);
 
             JButton btnSave = new JButton("Save Changes");
-            btnSave.setFont(new Font("SansSerif", Font.BOLD, 13));
+            btnSave.setFont(new Font("SansSerif", Font.BOLD, 14));
+            btnSave.setPreferredSize(new Dimension(150, 32));
             btnSave.setEnabled(false);
-            gbc.gridy = 3; gbc.gridx = 1; gbc.anchor = GridBagConstraints.EAST; gbc.fill = GridBagConstraints.NONE;
+            
+            gbc.gridy = 5; gbc.gridx = 3; gbc.gridwidth = 1;
+            gbc.anchor = GridBagConstraints.EAST; gbc.fill = GridBagConstraints.NONE;
             fieldsPanel.add(btnSave, gbc);
 
             editPanel.add(infoPanel, BorderLayout.WEST);
@@ -133,40 +203,54 @@ public class Main {
                 }
             });
 
-            btnCalendar.addActionListener(e -> {
-                Date current;
-                try { current = DATE_FORMAT.parse(tfDate.getText()); } 
-                catch (Exception ex) { current = new Date(); }
-                showDatePicker(frame, current, d -> tfDate.setText(DATE_FORMAT.format(d)));
-            });
-
             // Save Action
             Runnable saveAction = () -> {
                 int row = table.getSelectedRow();
                 if (row != -1) {
                     int modelRow = table.convertRowIndexToModel(row);
-                    String path = (String) model.getValueAt(modelRow, 5);
-                    String titleText = tfTitle.getText();
-                    String artistText = tfArtist.getText();
-                    String dateText = tfDate.getText();
+                    String path = (String) model.getValueAt(modelRow, 11);
                     
-                    if (AudioFileProcessor.updateMetadata(path, titleText, artistText, dateText, newCoverFile)) {
+                    String genre = (String) cbGenre.getEditor().getItem();
+
+                    if (AudioFileProcessor.updateMetadata(path, tfTitle.getText(), tfArtist.getText(), tfAlbum.getText(), 
+                            tfYear.getText(), tfTrack.getText(), genre, tfComment.getText(), 
+                            tfComposer.getText(), tfDisc.getText(), newCoverFile)) {
                         newCoverFile = null;
-                        // Refresh data in table
                         AudioMetadata m = AudioFileProcessor.extractMetadata(new File(path));
+                        
+                        // Update Table
                         model.setValueAt(m.coverArt, modelRow, 0);
                         model.setValueAt(m.title, modelRow, 2);
                         model.setValueAt(m.artistName, modelRow, 3);
-                        model.setValueAt(m.releaseDate, modelRow, 4);
+                        model.setValueAt(m.album, modelRow, 4);
+                        model.setValueAt(m.year, modelRow, 5);
+                        model.setValueAt(m.trackNumber, modelRow, 6);
+                        model.setValueAt(m.genre, modelRow, 7);
+                        model.setValueAt(m.discNumber, modelRow, 8);
+                        model.setValueAt(m.composer, modelRow, 9);
+                        model.setValueAt(m.comment, modelRow, 10);
                         
-                        // Sync edit panel too
+                        // Update Edit Panel Fields
+                        tfTitle.setText(m.title);
+                        tfArtist.setText(m.artistName);
+                        tfAlbum.setText(m.album);
+                        tfYear.setText(m.year);
+                        tfTrack.setText(m.trackNumber);
+                        cbGenre.setSelectedItem(m.genre != null ? m.genre : "");
+                        if (!cbGenre.getSelectedItem().equals(m.genre)) {
+                            cbGenre.getEditor().setItem(m.genre != null ? m.genre : "");
+                        }
+                        tfDisc.setText(m.discNumber);
+                        tfComposer.setText(m.composer);
+                        tfComment.setText(m.comment);
+                        
                         lblCover.setIcon(m.largeCoverArt);
                         lblCover.setText(m.largeCoverArt == null ? "<html><center>No Cover<br>(Click to add)</center></html>" : "");
                         
                         table.repaint();
                         JOptionPane.showMessageDialog(frame, "Metadata saved successfully.");
                     } else {
-                        JOptionPane.showMessageDialog(frame, "Failed to save metadata. Ensure the file format supports the chosen fields.", "Error", JOptionPane.ERROR_MESSAGE);
+                        JOptionPane.showMessageDialog(frame, "Failed to save metadata.", "Error", JOptionPane.ERROR_MESSAGE);
                     }
                 }
             };
@@ -185,21 +269,38 @@ public class Main {
 
                     if (hasSelection) {
                         int modelRow = table.convertRowIndexToModel(row);
-                        String path = (String) model.getValueAt(modelRow, 5);
+                        String path = (String) model.getValueAt(modelRow, 11);
                         AudioMetadata m = AudioFileProcessor.extractMetadata(new File(path));
+                        lblEditTitle.setText(m.fileName + " - Edit");
                         lblCover.setIcon(m.largeCoverArt);
                         lblCover.setText(m.largeCoverArt == null ? "<html><center>No Cover<br>(Click to add)</center></html>" : "");
                         lblFileName.setText("File: " + m.fileName);
                         tfTitle.setText(m.title);
                         tfArtist.setText(m.artistName);
-                        tfDate.setText(m.releaseDate != null ? m.releaseDate : "");
+                        tfAlbum.setText(m.album);
+                        tfYear.setText(m.year);
+                        tfTrack.setText(m.trackNumber);
+                        cbGenre.setSelectedItem(m.genre != null ? m.genre : "");
+                        if (!cbGenre.getSelectedItem().equals(m.genre)) {
+                            cbGenre.getEditor().setItem(m.genre != null ? m.genre : "");
+                        }
+                        tfDisc.setText(m.discNumber);
+                        tfComposer.setText(m.composer);
+                        tfComment.setText(m.comment);
                     } else {
+                        lblEditTitle.setText("No file selected - Edit");
                         lblCover.setIcon(null);
                         lblCover.setText("");
                         lblFileName.setText("File: ");
                         tfTitle.setText("");
                         tfArtist.setText("");
-                        tfDate.setText("");
+                        tfAlbum.setText("");
+                        tfYear.setText("");
+                        tfTrack.setText("");
+                        cbGenre.setSelectedItem("");
+                        tfDisc.setText("");
+                        tfComposer.setText("");
+                        tfComment.setText("");
                     }
                 }
             });
@@ -242,7 +343,7 @@ public class Main {
             frame.add(toolBar, BorderLayout.NORTH);
             
             JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new JScrollPane(table), editPanel);
-            splitPane.setDividerLocation(520);
+            splitPane.setDividerLocation(430);
             splitPane.setResizeWeight(1.0);
             frame.add(splitPane, BorderLayout.CENTER);
             
@@ -252,82 +353,25 @@ public class Main {
         });
     }
 
+    private static void applyNumericFilter(JTextField field) {
+        ((AbstractDocument) field.getDocument()).setDocumentFilter(new DocumentFilter() {
+            @Override
+            public void insertString(FilterBypass fb, int offset, String string, AttributeSet attr) throws BadLocationException {
+                if (string != null && string.matches("\\d*")) super.insertString(fb, offset, string, attr);
+            }
+            @Override
+            public void replace(FilterBypass fb, int offset, int length, String text, AttributeSet attrs) throws BadLocationException {
+                if (text != null && text.matches("\\d*")) super.replace(fb, offset, length, text, attrs);
+            }
+        });
+    }
+
     private static void setPanelEnabled(JPanel panel, boolean enabled) {
         for (Component cp : panel.getComponents()) {
             cp.setEnabled(enabled);
             if (cp instanceof JPanel) setPanelEnabled((JPanel) cp, enabled);
+            if (cp instanceof JComboBox) cp.setEnabled(enabled);
         }
-    }
-
-    private static void showDatePicker(JFrame parent, Date initialDate, Consumer<Date> onSelect) {
-        JDialog dialog = new JDialog(parent, "Select Date", true);
-        dialog.setResizable(false);
-        dialog.setLayout(new BorderLayout());
-        
-        Calendar cal = Calendar.getInstance();
-        cal.setTime(initialDate != null ? initialDate : new Date());
-        
-        JPanel calendarPanel = new JPanel(new BorderLayout());
-        JLabel monthLabel = new JLabel("", SwingConstants.CENTER);
-        monthLabel.setFont(new Font("SansSerif", Font.BOLD, 13));
-        
-        JPanel daysGrid = new JPanel(new GridLayout(0, 7));
-        
-        Runnable updateDays = () -> {
-            daysGrid.removeAll();
-            monthLabel.setText(new SimpleDateFormat("MMMM yyyy").format(cal.getTime()));
-            
-            String[] headers = {"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"};
-            for (String h : headers) {
-                JLabel l = new JLabel(h, SwingConstants.CENTER);
-                l.setFont(new Font("SansSerif", Font.PLAIN, 10));
-                l.setForeground(Color.GRAY);
-                daysGrid.add(l);
-            }
-            
-            Calendar temp = (Calendar) cal.clone();
-            temp.set(Calendar.DAY_OF_MONTH, 1);
-            int startDay = temp.get(Calendar.DAY_OF_WEEK);
-            for (int i = 1; i < startDay; i++) daysGrid.add(new JLabel(""));
-            
-            int maxDay = temp.getActualMaximum(Calendar.DAY_OF_MONTH);
-            for (int i = 1; i <= maxDay; i++) {
-                int day = i;
-                JButton btn = new JButton(String.valueOf(i));
-                btn.setFont(new Font("SansSerif", Font.PLAIN, 10));
-                btn.setMargin(new Insets(1, 1, 1, 1));
-                btn.addActionListener(e -> {
-                    cal.set(Calendar.DAY_OF_MONTH, day);
-                    onSelect.accept(cal.getTime());
-                    dialog.dispose();
-                });
-                daysGrid.add(btn);
-            }
-            daysGrid.revalidate();
-            daysGrid.repaint();
-        };
-
-        JButton btnPrev = new JButton("<");
-        btnPrev.setPreferredSize(new Dimension(40, 25));
-        btnPrev.addActionListener(e -> { cal.add(Calendar.MONTH, -1); updateDays.run(); });
-        JButton btnNext = new JButton(">");
-        btnNext.setPreferredSize(new Dimension(40, 25));
-        btnNext.addActionListener(e -> { cal.add(Calendar.MONTH, 1); updateDays.run(); });
-        
-        JPanel header = new JPanel(new BorderLayout());
-        header.add(btnPrev, BorderLayout.WEST);
-        header.add(monthLabel, BorderLayout.CENTER);
-        header.add(btnNext, BorderLayout.EAST);
-        
-        calendarPanel.add(header, BorderLayout.NORTH);
-        calendarPanel.add(daysGrid, BorderLayout.CENTER);
-        
-        updateDays.run();
-        dialog.add(calendarPanel);
-        dialog.pack();
-        dialog.setSize(250, 230);
-        dialog.setLocationRelativeTo(parent);
-        dialog.setVisible(true);
     }
 
     private static JTable createTable(DefaultTableModel model) {
@@ -404,7 +448,7 @@ public class Main {
         int[] rows = table.getSelectedRows();
         for (int i = rows.length - 1; i >= 0; i--) {
             int modelRow = table.convertRowIndexToModel(rows[i]);
-            loadedFilePaths.remove((String) model.getValueAt(modelRow, 5));
+            loadedFilePaths.remove((String) model.getValueAt(modelRow, 11));
             model.removeRow(modelRow);
         }
         table.repaint();
@@ -413,7 +457,7 @@ public class Main {
     private static void showSelectedInFinder(JTable table, DefaultTableModel model) {
         int row = table.getSelectedRow();
         if (row != -1) {
-            File f = new File((String) model.getValueAt(table.convertRowIndexToModel(row), 5));
+            File f = new File((String) model.getValueAt(table.convertRowIndexToModel(row), 11));
             try {
                 if (Desktop.isDesktopSupported()) Desktop.getDesktop().browseFileDirectory(f);
                 else Runtime.getRuntime().exec(new String[]{"open", "-R", f.getAbsolutePath()});
@@ -477,7 +521,7 @@ public class Main {
         if (!loadedFilePaths.add(file.getAbsolutePath())) return;
         AudioMetadata m = AudioFileProcessor.extractMetadata(file);
         SwingUtilities.invokeLater(() -> {
-            model.addRow(new Object[]{m.coverArt, m.fileName, m.title, m.artistName, m.releaseDate, m.filePath});
+            model.addRow(new Object[]{m.coverArt, m.fileName, m.title, m.artistName, m.album, m.year, m.trackNumber, m.genre, m.discNumber, m.composer, m.comment, m.filePath});
         });
     }
 }
