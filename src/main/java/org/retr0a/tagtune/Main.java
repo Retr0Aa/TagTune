@@ -2,6 +2,7 @@ package org.retr0a.tagtune;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableCellRenderer;
 import javax.swing.text.AbstractDocument;
@@ -43,21 +44,21 @@ public class Main {
         System.setProperty("apple.awt.application.name", "TagTune");
         System.setProperty("apple.laf.useScreenMenuBar", "true");
         System.setProperty("com.apple.mrj.application.apple.menu.about.name", "TagTune");
-        System.setProperty("apple.awt.fileDialogForDirectories", "true");
-
         SwingUtilities.invokeLater(() -> {
             JFrame frame = new JFrame("TagTune");
             frame.setSize(1200, 800);
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
             frame.setLayout(new BorderLayout());
 
-            // Load app icon from resources and apply native macOS effects
+            // Use the macOS icon only on macOS; other platforms use the default app icon.
             Image appIcon = null;
             try {
-                URL iconUrl = Main.class.getResource("/Icon-iOS-Default-1024x1024@1x.png");
+                boolean isMac = System.getProperty("os.name", "").toLowerCase().contains("mac");
+                String iconPath = isMac ? "/Icon-iOS-Default-1024x1024@1x.png" : "/Icon-Default.png";
+                URL iconUrl = Main.class.getResource(iconPath);
                 if (iconUrl != null) {
                     Image rawIcon = ImageIO.read(iconUrl);
-                    appIcon = ImageUtils.applyMacEffects(rawIcon);
+                    appIcon = isMac ? ImageUtils.applyMacEffects(rawIcon) : rawIcon;
                 } else {
                     appIcon = ImageUtils.createAppIcon(512);
                 }
@@ -182,15 +183,9 @@ public class Main {
                 @Override
                 public void mouseClicked(MouseEvent e) {
                     if (lblCover.isEnabled()) {
-                        System.setProperty("apple.awt.fileDialogForDirectories", "false");
-                        FileDialog fd = new FileDialog(frame, "Select Cover Art", FileDialog.LOAD);
-                        fd.setFilenameFilter((dir, name) -> {
-                            String n = name.toLowerCase();
-                            return n.endsWith(".jpg") || n.endsWith(".jpeg") || n.endsWith(".png");
-                        });
-                        fd.setVisible(true);
-                        if (fd.getDirectory() != null && fd.getFile() != null) {
-                            newCoverFile = new File(fd.getDirectory(), fd.getFile());
+                        File selected = chooseImageFile(frame, "Select Cover Art");
+                        if (selected != null) {
+                            newCoverFile = selected;
                             try {
                                 BufferedImage img = ImageIO.read(newCoverFile);
                                 lblCover.setIcon(new ImageIcon(ImageUtils.scaleImage(img, AudioFileProcessor.LARGE_COVER_SIZE, AudioFileProcessor.LARGE_COVER_SIZE)));
@@ -328,15 +323,15 @@ public class Main {
             toolBar.add(btnRemove);
             
             toolBar.addSeparator(new Dimension(15, 0));
-            JButton btnShowInFinder = createToolbarButton("Show in Finder", UIManager.getIcon("FileView.hardDriveIcon"), new Dimension(145, 32), ev -> showSelectedInFinder(table, model));
-            btnShowInFinder.setEnabled(false);
-            toolBar.add(btnShowInFinder);
+            JButton btnShowInFileManager = createToolbarButton(getShowInFileManagerLabel(), UIManager.getIcon("FileView.hardDriveIcon"), new Dimension(145, 32), ev -> showSelectedInFileManager(table, model));
+            btnShowInFileManager.setEnabled(false);
+            toolBar.add(btnShowInFileManager);
 
             table.getSelectionModel().addListSelectionListener(ev -> {
                 if (!ev.getValueIsAdjusting()) {
                     boolean hasSelection = table.getSelectedRow() != -1;
                     btnRemove.setEnabled(hasSelection);
-                    btnShowInFinder.setEnabled(hasSelection);
+                    btnShowInFileManager.setEnabled(hasSelection);
                 }
             });
 
@@ -421,27 +416,50 @@ public class Main {
     }
 
     private static void openFolderDialog(JFrame frame, DefaultTableModel model) {
-        System.setProperty("apple.awt.fileDialogForDirectories", "true");
-        FileDialog d = new FileDialog(frame, "Select Folder", FileDialog.LOAD);
-        d.setVisible(true);
-        if (d.getDirectory() != null) {
-            File f = new File(d.getDirectory(), d.getFile() != null ? d.getFile() : "");
-            if (f.exists()) {
-                recentManager.addToRecent(f.getAbsolutePath());
-                loadFiles(Collections.singletonList(f), model);
-                updateRecentMenu(model);
-            }
+        File selected = chooseDirectory(frame, "Select Music Folder");
+        if (selected != null) {
+            recentManager.addToRecent(selected.getAbsolutePath());
+            loadFiles(Collections.singletonList(selected), model);
+            updateRecentMenu(frame, model);
         }
     }
 
     private static void openFileDialog(JFrame frame, DefaultTableModel model) {
-        System.setProperty("apple.awt.fileDialogForDirectories", "false");
-        FileDialog d = new FileDialog(frame, "Select Audio File", FileDialog.LOAD);
-        d.setFilenameFilter((dir, name) -> AudioFileProcessor.isAudioFile(new File(dir, name)));
-        d.setVisible(true);
-        if (d.getDirectory() != null && d.getFile() != null) {
-            loadFiles(Collections.singletonList(new File(d.getDirectory(), d.getFile())), model);
+        File selected = chooseAudioFile(frame, "Select Audio File");
+        if (selected != null) {
+            File parent = selected.getParentFile();
+            if (parent != null) {
+                recentManager.addToRecent(parent.getAbsolutePath());
+            }
+            loadFiles(Collections.singletonList(selected), model);
+            updateRecentMenu(frame, model);
         }
+    }
+
+    private static File chooseDirectory(Component parent, String title) {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle(title);
+        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        chooser.setAcceptAllFileFilterUsed(false);
+        return chooser.showOpenDialog(parent) == JFileChooser.APPROVE_OPTION ? chooser.getSelectedFile() : null;
+    }
+
+    private static File chooseAudioFile(Component parent, String title) {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle(title);
+        chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+        chooser.setAcceptAllFileFilterUsed(true);
+        chooser.setFileFilter(new FileNameExtensionFilter("Audio files (*.mp3, *.m4a, *.flac, *.wav, *.ogg)", "mp3", "m4a", "flac", "wav", "ogg"));
+        return chooser.showOpenDialog(parent) == JFileChooser.APPROVE_OPTION ? chooser.getSelectedFile() : null;
+    }
+
+    private static File chooseImageFile(Component parent, String title) {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle(title);
+        chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+        chooser.setAcceptAllFileFilterUsed(true);
+        chooser.setFileFilter(new FileNameExtensionFilter("Image files (*.jpg, *.jpeg, *.png)", "jpg", "jpeg", "png"));
+        return chooser.showOpenDialog(parent) == JFileChooser.APPROVE_OPTION ? chooser.getSelectedFile() : null;
     }
 
     private static void removeSelectedRows(JTable table, DefaultTableModel model) {
@@ -454,13 +472,34 @@ public class Main {
         table.repaint();
     }
 
-    private static void showSelectedInFinder(JTable table, DefaultTableModel model) {
+    private static String getShowInFileManagerLabel() {
+        return isMac() ? "Show in Finder" : "Show in Explorer";
+    }
+
+    private static boolean isMac() {
+        return System.getProperty("os.name", "").toLowerCase().contains("mac");
+    }
+
+    private static boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase().contains("win");
+    }
+
+    private static void showSelectedInFileManager(JTable table, DefaultTableModel model) {
         int row = table.getSelectedRow();
         if (row != -1) {
             File f = new File((String) model.getValueAt(table.convertRowIndexToModel(row), 11));
             try {
-                if (Desktop.isDesktopSupported()) Desktop.getDesktop().browseFileDirectory(f);
-                else Runtime.getRuntime().exec(new String[]{"open", "-R", f.getAbsolutePath()});
+                if (isMac()) {
+                    if (Desktop.isDesktopSupported()) {
+                        Desktop.getDesktop().browseFileDirectory(f);
+                    } else {
+                        Runtime.getRuntime().exec(new String[]{"open", "-R", f.getAbsolutePath()});
+                    }
+                } else if (isWindows()) {
+                    Runtime.getRuntime().exec(new String[]{"explorer.exe", "/select,", f.getAbsolutePath()});
+                } else if (Desktop.isDesktopSupported()) {
+                    Desktop.getDesktop().open(f.getParentFile());
+                }
             } catch (Exception ignored) {}
         }
     }
@@ -482,7 +521,7 @@ public class Main {
         saveMenuItem.setEnabled(false);
 
         recentMenu = new JMenu("Open Recent");
-        updateRecentMenu(model);
+        updateRecentMenu(frame, model);
 
         fm.add(openFolder);
         fm.add(openFile);
@@ -493,14 +532,22 @@ public class Main {
         frame.setJMenuBar(mb);
     }
 
-    private static void updateRecentMenu(DefaultTableModel model) {
+    private static void updateRecentMenu(JFrame frame, DefaultTableModel model) {
         recentMenu.removeAll();
         List<String> paths = recentManager.getRecentFolders();
         if (paths.isEmpty()) { recentMenu.setEnabled(false); return; }
         recentMenu.setEnabled(true);
         for (String p : paths) {
             JMenuItem item = new JMenuItem(p);
-            item.addActionListener(e -> loadFiles(Collections.singletonList(new File(p)), model));
+            item.addActionListener(e -> {
+                File path = new File(p);
+                if (path.exists()) {
+                    loadFiles(Collections.singletonList(path), model);
+                } else {
+                    JOptionPane.showMessageDialog(frame, "That recent location no longer exists:\n" + p, "TagTune", JOptionPane.WARNING_MESSAGE);
+                    updateRecentMenu(frame, model);
+                }
+            });
             recentMenu.add(item);
         }
     }
