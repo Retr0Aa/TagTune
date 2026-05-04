@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.jar.JarFile
 import javax.imageio.ImageIO
 
 plugins {
@@ -30,10 +31,33 @@ application {
     applicationDefaultJvmArgs = listOf("-Xdock:name=TagTune")
 }
 
-fun packagedJarFile(libsDir: File): File =
-    libsDir.listFiles()
-        ?.firstOrNull { it.name.endsWith(".jar") && !it.name.contains("plain") }
-        ?: throw RuntimeException("Jar not found in ${libsDir.absolutePath}")
+fun packagedJarFile(libsDir: File): File {
+    val fatJar = libsDir.listFiles()
+        ?.firstOrNull { it.name.endsWith("-all.jar") }
+        ?: throw RuntimeException("Fat jar not found in ${libsDir.absolutePath}")
+
+    // Verify a key dependency is actually bundled before jpackage runs.
+    JarFile(fatJar).use { jar ->
+        if (jar.getEntry("org/jaudiotagger/audio/AudioFileIO.class") == null) {
+            throw RuntimeException("Packaged jar ${fatJar.name} is missing jaudiotagger classes")
+        }
+    }
+
+    return fatJar
+}
+
+tasks.register<Jar>("fatJar") {
+    archiveClassifier.set("all")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    from(sourceSets.main.get().output)
+    dependsOn(configurations.runtimeClasspath)
+    from({
+        configurations.runtimeClasspath.get()
+            .filter { it.name.endsWith(".jar") }
+            .map { zipTree(it) }
+    })
+}
 
 fun commandExists(command: String): Boolean {
     val path = System.getenv("PATH") ?: return false
@@ -154,7 +178,7 @@ tasks.register("createIco") {
 }
 
 tasks.register<Exec>("packageDmg") {
-    dependsOn("build", "createIcns")
+    dependsOn("fatJar", "createIcns")
 
     val libsDir = layout.buildDirectory.dir("libs")
     val icnsFile = layout.buildDirectory.file("TagTune.icns")
@@ -178,7 +202,7 @@ tasks.register<Exec>("packageDmg") {
 }
 
 tasks.register<Exec>("packageAppImageWindows") {
-    dependsOn("build", "createIco")
+    dependsOn("fatJar", "createIco")
 
     val libsDir = layout.buildDirectory.dir("libs")
     val icoFile = layout.buildDirectory.file("TagTune.ico")
@@ -205,7 +229,7 @@ tasks.register<Exec>("packageAppImageWindows") {
 }
 
 tasks.register<Exec>("packageExe") {
-    dependsOn("build", "createIco")
+    dependsOn("fatJar", "createIco")
 
     val libsDir = layout.buildDirectory.dir("libs")
     val icoFile = layout.buildDirectory.file("TagTune.ico")
