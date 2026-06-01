@@ -16,6 +16,7 @@
 #include <taglib/tag.h>
 #include <taglib/tpropertymap.h>
 #include <taglib/mpegfile.h>
+#include <taglib/wavfile.h>
 #include <taglib/id3v2tag.h>
 #include <taglib/id3v2frame.h>
 #include <taglib/textidentificationframe.h>
@@ -43,6 +44,65 @@ QString sidecarCoverPathForFile(const QString &filePath)
 {
     // store cover next to the audio file with a predictable suffix
     return filePath + QLatin1String(".tagtune.cover.png");
+}
+
+QPixmap pixmapFromTagLibBytes(const TagLib::ByteVector &data, const char *mimeType = nullptr)
+{
+    const QByteArray bytes(data.data(), data.size());
+    QPixmap pix;
+    bool ok = pix.loadFromData(reinterpret_cast<const uchar *>(bytes.constData()), bytes.size());
+    if (!ok || pix.isNull()) {
+        QImage img;
+        if (mimeType) {
+            ok = img.loadFromData(bytes, mimeType);
+        } else {
+            ok = img.loadFromData(bytes);
+        }
+        if (ok && !img.isNull()) {
+            pix = QPixmap::fromImage(img);
+        }
+    }
+    return pix;
+}
+
+bool loadEmbeddedArtworkFromId3v2(TagLib::ID3v2::Tag *id3v2, Track &track, const QString &sourceLabel)
+{
+    if (!id3v2) return false;
+
+    TagLib::ID3v2::FrameList frames = id3v2->frameList("APIC");
+    if (frames.isEmpty()) {
+        frames = id3v2->frameList("PIC");
+    }
+
+    qDebug() << sourceLabel << "APIC/PIC frames=" << frames.size();
+    for (auto fr : frames) {
+        auto *apic = dynamic_cast<TagLib::ID3v2::AttachedPictureFrame *>(fr);
+        if (!apic) {
+            continue;
+        }
+
+        const QString mime = QString::fromUtf8(apic->mimeType().toCString(true));
+        const TagLib::ByteVector data = apic->picture();
+        const QByteArray bytes(data.data(), data.size());
+
+        const char *fmt = nullptr;
+        if (mime.contains("jpeg", Qt::CaseInsensitive) || mime.contains("jpg", Qt::CaseInsensitive)) {
+            fmt = "JPG";
+        } else if (mime.contains("png", Qt::CaseInsensitive)) {
+            fmt = "PNG";
+        } else if (mime.contains("gif", Qt::CaseInsensitive)) {
+            fmt = "GIF";
+        }
+
+        QPixmap pix = pixmapFromTagLibBytes(data, fmt);
+        if (!pix.isNull()) {
+            track.coverArt = pix;
+            qDebug() << sourceLabel << "loaded cover mime=" << mime << "bytes=" << bytes.size();
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool saveSidecar(const Track &track)
@@ -178,54 +238,40 @@ Track MetadataService::loadTrack(const QString &filePath) const
                 int logCount = 0;
                 for (auto fr : allFrames) {
                     if (logCount++ >= 20) break;
-                    qDebug() << "  frame:" << fr->frameID();
+                    const TagLib::ByteVector frameId = fr->frameID();
+                    qDebug() << "  frame:" << QString::fromUtf8(frameId.data(), frameId.size());
                 }
 
-                // Check both APIC (ID3v2.3/2.4) and PIC (ID3v2.2)
-                TagLib::ID3v2::FrameList frames = id3v2->frameList("APIC");
-                qDebug() << "loadTrack: APIC frames=" << frames.size();
-                if (frames.isEmpty()) {
-                    frames = id3v2->frameList("PIC");
-                    qDebug() << "loadTrack: PIC frames=" << frames.size();
-                }
-                if (!frames.isEmpty()) {
-                    // find first attached picture frame
-                    for (auto fr : frames) {
-                        qDebug() << "loadTrack: inspecting frame id=" << fr->frameID();
-                        auto *apic = dynamic_cast<TagLib::ID3v2::AttachedPictureFrame*>(fr);
-                        if (!apic) {
-                            qDebug() << "loadTrack: frame is not AttachedPictureFrame (dynamic_cast failed)";
-                            continue;
-                        }
-                        qDebug() << "loadTrack: attached picture mime=" << apic->mimeType();
-                        TagLib::ByteVector data = apic->picture();
-                        qDebug() << "loadTrack: picture size bytes=" << data.size();
-                        const QByteArray bytes(data.data(), data.size());
-                        QPixmap pix;
-                        bool ok = pix.loadFromData(reinterpret_cast<const uchar*>(bytes.constData()), bytes.size());
-                        if (!ok || pix.isNull()) {
-                            // Try format hint from MIME type
-                            QString mime = QString::fromUtf8(apic->mimeType().toCString(true));
-                            const char *fmt = nullptr;
-                            if (mime.contains("jpeg") || mime.contains("jpg")) fmt = "JPG";
-                            else if (mime.contains("png")) fmt = "PNG";
-                            else if (mime.contains("gif")) fmt = "GIF";
-                            if (fmt) {
-                                ok = pix.loadFromData(reinterpret_cast<const uchar*>(bytes.constData()), bytes.size(), fmt);
-                            }
-                            if ((!ok || pix.isNull())) {
-                                QImage img;
-                                if (fmt) img.loadFromData(bytes, fmt);
-                                else img.loadFromData(bytes);
-                                if (!img.isNull()) pix = QPixmap::fromImage(img);
-                            }
-                        }
-                        if (!pix.isNull()) { track.coverArt = pix; qDebug() << "loadTrack: loaded cover from mp3"; break; }
-                    }
-                }
+                loadEmbeddedArtworkFromId3v2(id3v2, track, QStringLiteral("loadTrack: mp3"));
             }
             // Try to read album artist and composer from ID3v2 frames
             if (id3v2) {
+                if (id3v2->frameList("TPE2").isEmpty() == false) {
+                    auto f = id3v2->frameList("TPE2").front();
+                    TagLib::ID3v2::TextIdentificationFrame *tf = dynamic_cast<TagLib::ID3v2::TextIdentificationFrame*>(f);
+                    if (tf) track.albumArtist = QString::fromUtf8(tf->toString().toCString(true));
+                }
+                if (id3v2->frameList("TCOM").isEmpty() == false) {
+                    auto f = id3v2->frameList("TCOM").front();
+                    TagLib::ID3v2::TextIdentificationFrame *tf = dynamic_cast<TagLib::ID3v2::TextIdentificationFrame*>(f);
+                    if (tf) track.composer = QString::fromUtf8(tf->toString().toCString(true));
+                }
+                if (id3v2->frameList("TPOS").isEmpty() == false) {
+                    auto f = id3v2->frameList("TPOS").front();
+                    TagLib::ID3v2::TextIdentificationFrame *tf = dynamic_cast<TagLib::ID3v2::TextIdentificationFrame*>(f);
+                    if (tf) track.discNumber = QString::fromUtf8(tf->toString().toCString(true));
+                }
+            }
+        }
+    } else if (ext == QLatin1String("wav") || ext == QLatin1String("wave")) {
+        TagLib::RIFF::WAV::File *wf = dynamic_cast<TagLib::RIFF::WAV::File *>(underlying);
+        qDebug() << "loadTrack: WAV::File via FileRef available=" << (wf != nullptr);
+        if (wf) {
+            TagLib::ID3v2::Tag *id3v2 = wf->ID3v2Tag();
+            qDebug() << "loadTrack: wav id3v2 tag present=" << (id3v2 != nullptr);
+            if (id3v2) {
+                loadEmbeddedArtworkFromId3v2(id3v2, track, QStringLiteral("loadTrack: wav"));
+
                 if (id3v2->frameList("TPE2").isEmpty() == false) {
                     auto f = id3v2->frameList("TPE2").front();
                     TagLib::ID3v2::TextIdentificationFrame *tf = dynamic_cast<TagLib::ID3v2::TextIdentificationFrame*>(f);
@@ -406,6 +452,37 @@ bool MetadataService::saveTrack(const Track &track, QString *errorMessage) const
             // fallback to sidecar
             if (saveSidecar(track)) return true;
             if (errorMessage) *errorMessage = QStringLiteral("Unable to write MP3 tags or sidecar");
+            return false;
+        } else if (ext == QLatin1String("wav") || ext == QLatin1String("wave")) {
+            TagLib::RIFF::WAV::File f(filePath.toUtf8().constData());
+            TagLib::ID3v2::Tag *id3v2 = f.ID3v2Tag();
+            TagLib::Tag *t = f.tag();
+            if (t) {
+                t->setTitle(track.title.toUtf8().constData());
+                t->setArtist(track.artist.toUtf8().constData());
+                t->setAlbum(track.album.toUtf8().constData());
+                t->setGenre(track.genre.toUtf8().constData());
+                t->setComment(track.comment.toUtf8().constData());
+                if (!track.year.isEmpty()) t->setYear(track.year.toInt());
+                if (!track.trackNumber.isEmpty()) t->setTrack(track.trackNumber.toInt());
+            }
+
+            if (!track.coverArt.isNull() && id3v2) {
+                id3v2->removeFrames("APIC");
+                id3v2->removeFrames("PIC");
+                QByteArray bytes;
+                QBuffer buf(&bytes);
+                buf.open(QIODevice::WriteOnly);
+                track.coverArt.save(&buf, "PNG");
+                TagLib::ID3v2::AttachedPictureFrame *apic = new TagLib::ID3v2::AttachedPictureFrame;
+                apic->setMimeType("image/png");
+                apic->setPicture(TagLib::ByteVector(bytes.constData(), bytes.size()));
+                id3v2->addFrame(apic);
+            }
+
+            if (f.save()) return true;
+            if (saveSidecar(track)) return true;
+            if (errorMessage) *errorMessage = QStringLiteral("Unable to write WAV tags or sidecar");
             return false;
         } else if (ext == QLatin1String("flac")) {
             TagLib::FLAC::File f(filePath.toUtf8().constData());
