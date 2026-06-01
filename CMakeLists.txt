@@ -9,27 +9,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
-
-# Require TagLib via pkg-config so the app writes tags into audio files (no JSON sidecars)
-find_package(PkgConfig)
-if(PkgConfig_FOUND)
-    pkg_check_modules(TAGLIB QUIET taglib)
-endif()
-
-# If pkg-config didn't find taglib, try common Homebrew locations and re-run pkg-config there
-if(NOT TAGLIB_FOUND)
-    if(EXISTS "/opt/homebrew/opt/taglib/lib/pkgconfig/taglib.pc")
-        set(ENV{PKG_CONFIG_PATH} "/opt/homebrew/opt/taglib/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
-        pkg_check_modules(TAGLIB QUIET taglib)
-    elseif(EXISTS "/usr/local/opt/taglib/lib/pkgconfig/taglib.pc")
-        set(ENV{PKG_CONFIG_PATH} "/usr/local/opt/taglib/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
-        pkg_check_modules(TAGLIB QUIET taglib)
-    endif()
-endif()
-
-if(NOT TAGLIB_FOUND)
-    message(FATAL_ERROR "TagLib was not found. Install it (e.g. 'brew install taglib') or set PKG_CONFIG_PATH so CMake can find taglib.pc.")
-endif()
+find_package(TagLib CONFIG REQUIRED)
 
 add_executable(TagTune
     main.cpp
@@ -38,6 +18,26 @@ add_executable(TagTune
     src/TagEditorWidget.cpp
     src/TrackTableModel.cpp
 )
+
+target_include_directories(TagTune PRIVATE src)
+
+target_link_libraries(TagTune PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    TagLib::tag
+)
+
+target_compile_definitions(TagTune PRIVATE HAVE_TAGLIB=1)
+
+if (WIN32)
+    set(QT_DEPLOY_TOOL "C:/Qt/6.11.1/msvc2022_64/bin/windeployqt.exe")
+
+    add_custom_command(TARGET TagTune POST_BUILD
+        COMMAND ${QT_DEPLOY_TOOL} $<TARGET_FILE:TagTune>
+        COMMENT "Deploying Qt DLLs with windeployqt"
+    )
+endif()
 
 if(APPLE)
     set_target_properties(TagTune PROPERTIES
@@ -49,18 +49,7 @@ if(APPLE)
     )
 endif()
 
-target_include_directories(TagTune PRIVATE src)
-
-target_link_libraries(TagTune PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets)
-
-message(STATUS "TagLib found — enabling in-file tag editing")
-target_include_directories(TagTune PRIVATE ${TAGLIB_INCLUDE_DIRS})
-target_link_directories(TagTune PRIVATE ${TAGLIB_LIBRARY_DIRS})
-target_link_libraries(TagTune PRIVATE ${TAGLIB_LIBRARIES})
-target_compile_definitions(TagTune PRIVATE HAVE_TAGLIB=1)
-
 install(TARGETS TagTune
     BUNDLE DESTINATION .
     RUNTIME DESTINATION bin
 )
-

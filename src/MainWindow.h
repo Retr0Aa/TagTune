@@ -26,6 +26,8 @@ private slots:
     void onSelectionChanged();
     void onSaveRequested(const Track &track);
     void refreshEditorFromSelection();
+    void onRemoveRequested();
+    void onShowContextMenu(const QPoint &pos);
 
 private:
     void setupUi();
@@ -42,6 +44,7 @@ private:
     QAction *m_openFolderAction = nullptr;
     QAction *m_saveAction = nullptr;
     QAction *m_clearAction = nullptr;
+    QAction *m_removeAction = nullptr;
     QMenu *m_recentMenu = nullptr;
 
     QTableView *m_tableView = nullptr;

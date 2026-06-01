@@ -24,6 +24,7 @@
 #include <QDirIterator>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QSize>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -47,6 +48,19 @@ void MainWindow::setupUi()
     m_tableView->setSelectionMode(QAbstractItemView::SingleSelection);
     m_tableView->setAlternatingRowColors(true);
     m_tableView->setSortingEnabled(false);
+    m_tableView->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_tableView, &QWidget::customContextMenuRequested, this, &MainWindow::onShowContextMenu);
+
+    // Create and install the model before configuring header sections. If the
+    // header is configured before a model is set, calls that resolve logical
+    // <-> visual indices can return -1 and trigger assertions in Qt.
+    m_model = new TrackTableModel(this);
+    m_tableView->setModel(m_model);
+
+    // Ensure icons (cover art) are visible at a reasonable size
+    m_tableView->setIconSize(QSize(48, 48));
+    m_tableView->verticalHeader()->setDefaultSectionSize(56);
+
     m_tableView->verticalHeader()->setVisible(false);
     m_tableView->horizontalHeader()->setStretchLastSection(true);
     m_tableView->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
@@ -66,9 +80,6 @@ void MainWindow::setupUi()
     layout->addWidget(splitter);
     setCentralWidget(central);
 
-    m_model = new TrackTableModel(this);
-    m_tableView->setModel(m_model);
-
     connect(m_tableView->selectionModel(), &QItemSelectionModel::currentRowChanged,
             this, &MainWindow::onSelectionChanged);
     connect(m_editor, &TagEditorWidget::saveRequested,
@@ -86,6 +97,7 @@ void MainWindow::setupActions()
     m_saveAction = new QAction(tr("Save Current"), this);
     m_saveAction->setShortcut(QKeySequence::Save);
     m_clearAction = new QAction(tr("Clear Selection"), this);
+    m_removeAction = new QAction(tr("Remove"), this);
     m_recentMenu = nullptr;
 
     connect(m_openAction, &QAction::triggered, this, &MainWindow::loadFiles);
@@ -101,6 +113,8 @@ void MainWindow::setupActions()
         m_editor->clearTrack();
         statusBar()->showMessage(tr("Selection cleared."), 2000);
     });
+
+    connect(m_removeAction, &QAction::triggered, this, &MainWindow::onRemoveRequested);
 }
 
 void MainWindow::setupToolbar()
@@ -114,6 +128,7 @@ void MainWindow::setupToolbar()
     toolbar->addAction(m_openAction);
     toolbar->addAction(m_saveAction);
     toolbar->addAction(m_clearAction);
+    toolbar->addAction(m_removeAction);
     toolbar->addSeparator();
 #endif
 }
@@ -138,6 +153,7 @@ void MainWindow::setupMenuBar()
     connect(saveAct, &QAction::triggered, m_saveAction, &QAction::trigger);
 
     fileMenu->addAction(m_clearAction);
+    fileMenu->addAction(m_removeAction);
 
     fileMenu->addSeparator();
 
@@ -336,6 +352,43 @@ void MainWindow::onSaveRequested(const Track &track)
 
     m_model->updateTrack(current.row(), track);
     statusBar()->showMessage(tr("Saved tags for %1").arg(track.title.isEmpty() ? QFileInfo(track.filePath).baseName() : track.title), 3000);
+}
+
+void MainWindow::onRemoveRequested()
+{
+    const QModelIndex current = m_tableView->currentIndex();
+    if (!current.isValid()) return;
+
+    const int row = current.row();
+    const Track t = m_model->trackAt(row);
+
+    // Remove from loaded paths
+    QFileInfo fi(t.filePath);
+    QString key = fi.canonicalFilePath();
+    if (key.isEmpty()) key = fi.absoluteFilePath();
+    m_loadedPaths.remove(key);
+
+    m_model->removeTrack(row);
+
+    // update selection
+    const int rows = m_model->rowCount();
+    if (rows > 0) {
+        m_tableView->selectRow(qMin(row, rows - 1));
+    } else {
+        m_editor->clearTrack();
+    }
+
+    statusBar()->showMessage(tr("Removed %1").arg(fi.fileName()), 2000);
+}
+
+void MainWindow::onShowContextMenu(const QPoint &pos)
+{
+    const QModelIndex idx = m_tableView->indexAt(pos);
+    QMenu menu(this);
+    if (idx.isValid()) {
+        menu.addAction(m_removeAction);
+    }
+    menu.exec(m_tableView->viewport()->mapToGlobal(pos));
 }
 
 

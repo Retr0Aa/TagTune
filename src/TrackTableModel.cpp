@@ -8,8 +8,6 @@
 #include <QPainter>
 #include <QStyle>
 
-// ...existing code...
-
 TrackTableModel::TrackTableModel(QObject *parent)
     : QAbstractTableModel(parent)
 {
@@ -131,6 +129,14 @@ void TrackTableModel::updateTrack(int row, const Track &track)
     const QModelIndex topLeft = index(row, 0);
     const QModelIndex bottomRight = index(row, ColumnCount - 1);
     emit dataChanged(topLeft, bottomRight, {Qt::DisplayRole, Qt::DecorationRole});
+}
+
+void TrackTableModel::removeTrack(int row)
+{
+    if (row < 0 || row >= m_tracks.size()) return;
+    beginRemoveRows(QModelIndex(), row, row);
+    m_tracks.removeAt(row);
+    endRemoveRows();
 }
 
 QPixmap TrackTableModel::coverForTrack(const Track &track) const

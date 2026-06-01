@@ -33,6 +33,7 @@ public:
     void addTrack(const Track &track);
     Track trackAt(int row) const;
     void updateTrack(int row, const Track &track);
+    void removeTrack(int row);
 
 private:
     QVector<Track> m_tracks;
