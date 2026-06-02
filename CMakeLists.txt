@@ -1,10 +1,11 @@
 cmake_minimum_required(VERSION 3.20)
-project(TagTune VERSION 0.1.0 LANGUAGES CXX)
+project(TagTune VERSION 1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
 find_package(TagLib CONFIG REQUIRED)
@@ -15,6 +16,7 @@ add_executable(TagTune
     src/MainWindow.cpp
     src/TagEditorWidget.cpp
     src/TrackTableModel.cpp
+    resources.qrc
 )
 
 target_include_directories(TagTune PRIVATE src)
@@ -38,13 +40,21 @@ if (WIN32)
 endif()
 
 if(APPLE)
+    set_source_files_properties(
+        icons/AppIcon.icns
+        PROPERTIES MACOSX_PACKAGE_LOCATION Resources
+    )
+
     set_target_properties(TagTune PROPERTIES
         MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_BUNDLE_NAME "TagTune"
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.retr0a.tagtune"
         MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
         MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
+        MACOSX_BUNDLE_ICON_FILE "AppIcon.icns"
     )
+
+    target_sources(TagTune PRIVATE icons/AppIcon.icns)
 endif()
 
 install(TARGETS TagTune

@@ -4,11 +4,13 @@
 
 #include "Track.h"
 
+class QGridLayout;
 class QLabel;
 class QLineEdit;
 class QSpinBox;
 class QPushButton;
 class QPixmap;
+class QResizeEvent;
 
 class TagEditorWidget final : public QWidget
 {
@@ -20,6 +22,7 @@ public:
     void setTrack(const Track &track);
     Track track() const;
     void clearTrack();
+    void setEditingEnabled(bool enabled);
 
 signals:
     void saveRequested(const Track &track);
@@ -29,14 +32,20 @@ private slots:
     void onSaveClicked();
     void onLoadCoverClicked();
 
+protected:
+    void resizeEvent(QResizeEvent *event) override;
+
 private:
     void applyTrack(const Track &track);
     Track collectTrack() const;
     void setCoverPixmap(const QPixmap &pixmap);
     void setEmptyCover();
+    void rebuildFieldLayout();
 
     QLabel *m_coverLabel = nullptr;
     QLabel *m_fileLabel = nullptr;
+    QWidget *m_fieldsContainer = nullptr;
+    QGridLayout *m_fieldsLayout = nullptr;
 
     QLineEdit *m_titleEdit = nullptr;
     QLineEdit *m_artistEdit = nullptr;
@@ -53,6 +62,5 @@ private:
     QPushButton *m_coverButton = nullptr;
 
     Track m_track;
+    int m_lastLayoutMode = -1;
 };
-
-

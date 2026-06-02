@@ -1,6 +1,6 @@
 #include "TagEditorWidget.h"
 
-#include <QFormLayout>
+#include <QGridLayout>
 #include <QFrame>
 #include <QFileDialog>
 #include <QHBoxLayout>
@@ -13,30 +13,31 @@
 #include <QPushButton>
 #include <QSpinBox>
 #include <QSizePolicy>
+#include <QResizeEvent>
 #include <QVBoxLayout>
 
-namespace
-{
-QPixmap makeDefaultCover()
-{
-    QPixmap pixmap(220, 220);
-    pixmap.fill(QColor(46, 52, 64));
+#include <array>
+#include <iterator>
 
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing);
-    painter.setPen(Qt::white);
-    QFont font = painter.font();
-    font.setPointSize(14);
-    font.setBold(true);
-    painter.setFont(font);
-    painter.drawText(pixmap.rect(), Qt::AlignCenter, QObject::tr("No Cover"));
-    return pixmap;
-}
+namespace {
+    QPixmap makeDefaultCover() {
+        QPixmap pixmap(220, 220);
+        pixmap.fill(QColor(46, 52, 64));
+
+        QPainter painter(&pixmap);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(Qt::white);
+        QFont font = painter.font();
+        font.setPointSize(14);
+        font.setBold(true);
+        painter.setFont(font);
+        painter.drawText(pixmap.rect(), Qt::AlignCenter, QObject::tr("No Cover"));
+        return pixmap;
+    }
 }
 
 TagEditorWidget::TagEditorWidget(QWidget *parent)
-    : QWidget(parent)
-{
+    : QWidget(parent) {
     auto *rootLayout = new QHBoxLayout(this);
 
     auto *coverColumn = new QVBoxLayout;
@@ -56,11 +57,11 @@ TagEditorWidget::TagEditorWidget(QWidget *parent)
     coverColumn->addWidget(m_coverButton);
     coverColumn->addStretch();
 
-    auto *formLayout = new QFormLayout;
-    formLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
-    formLayout->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    formLayout->setHorizontalSpacing(16);
-    formLayout->setVerticalSpacing(10);
+    m_fieldsContainer = new QWidget;
+    m_fieldsLayout = new QGridLayout(m_fieldsContainer);
+    m_fieldsLayout->setContentsMargins(0, 0, 0, 0);
+    m_fieldsLayout->setHorizontalSpacing(16);
+    m_fieldsLayout->setVerticalSpacing(10);
 
     m_titleEdit = new QLineEdit;
     m_artistEdit = new QLineEdit;
@@ -100,22 +101,10 @@ TagEditorWidget::TagEditorWidget(QWidget *parent)
     m_discSpin->setMinimumWidth(120);
     m_bpmSpin->setMinimumWidth(120);
 
-    formLayout->addRow(tr("Title"), m_titleEdit);
-    formLayout->addRow(tr("Artist"), m_artistEdit);
-    formLayout->addRow(tr("Album"), m_albumEdit);
-    formLayout->addRow(tr("Album Artist"), m_albumArtistEdit);
-    formLayout->addRow(tr("Genre"), m_genreEdit);
-    formLayout->addRow(tr("Comment"), m_commentEdit);
-    formLayout->addRow(tr("Composer"), m_composerEdit);
-    formLayout->addRow(tr("Year"), m_yearSpin);
-    formLayout->addRow(tr("Track #"), m_trackSpin);
-    formLayout->addRow(tr("Disc #"), m_discSpin);
-    formLayout->addRow(tr("BPM"), m_bpmSpin);
-
     m_saveButton = new QPushButton(tr("Save Tags"));
 
     auto *editorColumn = new QVBoxLayout;
-    editorColumn->addLayout(formLayout);
+    editorColumn->addWidget(m_fieldsContainer);
     editorColumn->addWidget(m_saveButton);
     editorColumn->addStretch();
 
@@ -124,21 +113,19 @@ TagEditorWidget::TagEditorWidget(QWidget *parent)
 
     connect(m_saveButton, &QPushButton::clicked, this, &TagEditorWidget::onSaveClicked);
     connect(m_coverButton, &QPushButton::clicked, this, &TagEditorWidget::onLoadCoverClicked);
+    rebuildFieldLayout();
 }
 
-void TagEditorWidget::setTrack(const Track &track)
-{
+void TagEditorWidget::setTrack(const Track &track) {
     m_track = track;
     applyTrack(track);
 }
 
-Track TagEditorWidget::track() const
-{
+Track TagEditorWidget::track() const {
     return collectTrack();
 }
 
-void TagEditorWidget::clearTrack()
-{
+void TagEditorWidget::clearTrack() {
     m_track = {};
     m_fileLabel->setText(tr("No track selected"));
     m_titleEdit->clear();
@@ -155,13 +142,34 @@ void TagEditorWidget::clearTrack()
     setEmptyCover();
 }
 
-void TagEditorWidget::onSaveClicked()
-{
+void TagEditorWidget::setEditingEnabled(bool enabled) {
+    m_fileLabel->setEnabled(enabled);
+    m_coverLabel->setEnabled(enabled);
+    m_titleEdit->setEnabled(enabled);
+    m_artistEdit->setEnabled(enabled);
+    m_albumEdit->setEnabled(enabled);
+    m_albumArtistEdit->setEnabled(enabled);
+    m_genreEdit->setEnabled(enabled);
+    m_commentEdit->setEnabled(enabled);
+    m_composerEdit->setEnabled(enabled);
+    m_yearSpin->setEnabled(enabled);
+    m_trackSpin->setEnabled(enabled);
+    m_discSpin->setEnabled(enabled);
+    m_bpmSpin->setEnabled(enabled);
+    m_saveButton->setEnabled(enabled);
+    m_coverButton->setEnabled(enabled);
+}
+
+void TagEditorWidget::resizeEvent(QResizeEvent *event) {
+    QWidget::resizeEvent(event);
+    rebuildFieldLayout();
+}
+
+void TagEditorWidget::onSaveClicked() {
     emit saveRequested(collectTrack());
 }
 
-void TagEditorWidget::onLoadCoverClicked()
-{
+void TagEditorWidget::onLoadCoverClicked() {
     const QString fileName = QFileDialog::getOpenFileName(
         this,
         tr("Select Cover Art"),
@@ -183,8 +191,7 @@ void TagEditorWidget::onLoadCoverClicked()
     emit coverRequested();
 }
 
-void TagEditorWidget::applyTrack(const Track &track)
-{
+void TagEditorWidget::applyTrack(const Track &track) {
     m_fileLabel->setText(track.filePath.isEmpty() ? tr("No track selected") : track.filePath);
     m_titleEdit->setText(track.title);
     m_artistEdit->setText(track.artist);
@@ -205,8 +212,7 @@ void TagEditorWidget::applyTrack(const Track &track)
     }
 }
 
-Track TagEditorWidget::collectTrack() const
-{
+Track TagEditorWidget::collectTrack() const {
     Track updated = m_track;
     updated.title = m_titleEdit->text().trimmed();
     updated.artist = m_artistEdit->text().trimmed();
@@ -222,8 +228,7 @@ Track TagEditorWidget::collectTrack() const
     return updated;
 }
 
-void TagEditorWidget::setCoverPixmap(const QPixmap &pixmap)
-{
+void TagEditorWidget::setCoverPixmap(const QPixmap &pixmap) {
     if (pixmap.isNull()) {
         setEmptyCover();
         return;
@@ -235,13 +240,63 @@ void TagEditorWidget::setCoverPixmap(const QPixmap &pixmap)
         Qt::SmoothTransformation));
 }
 
-void TagEditorWidget::setEmptyCover()
-{
+void TagEditorWidget::setEmptyCover() {
     m_coverLabel->setPixmap(makeDefaultCover().scaled(
         m_coverLabel->size(),
         Qt::KeepAspectRatioByExpanding,
         Qt::SmoothTransformation));
 }
 
+void TagEditorWidget::rebuildFieldLayout() {
+    const int width = m_fieldsContainer->width();
+    const int layoutMode = width >= 760 ? 2 : 1;
+    if (layoutMode == m_lastLayoutMode) {
+        return;
+    }
+    m_lastLayoutMode = layoutMode;
 
+    while (auto *item = m_fieldsLayout->takeAt(0)) {
+        if (QWidget *widget = item->widget()) {
+            if (qobject_cast<QLabel *>(widget)) {
+                delete widget;
+            }
+        }
+        delete item;
+    }
 
+    struct Row {
+        const char *label;
+        QWidget *field;
+    };
+
+    const Row rows[] = {
+        {QT_TR_NOOP("Title"), m_titleEdit},
+        {QT_TR_NOOP("Artist"), m_artistEdit},
+        {QT_TR_NOOP("Album"), m_albumEdit},
+        {QT_TR_NOOP("Album Artist"), m_albumArtistEdit},
+        {QT_TR_NOOP("Genre"), m_genreEdit},
+        {QT_TR_NOOP("Comment"), m_commentEdit},
+        {QT_TR_NOOP("Composer"), m_composerEdit},
+        {QT_TR_NOOP("Year"), m_yearSpin},
+        {QT_TR_NOOP("Track #"), m_trackSpin},
+        {QT_TR_NOOP("Disc #"), m_discSpin},
+        {QT_TR_NOOP("BPM"), m_bpmSpin},
+    };
+
+    const int rowCount = layoutMode == 2 ? (static_cast<int>(std::size(rows)) + 1) / 2 : static_cast<int>(std::size(rows));
+    for (int index = 0; index < static_cast<int>(std::size(rows)); ++index) {
+        const int columnGroup = layoutMode == 2 ? index / rowCount : 0;
+        const int row = layoutMode == 2 ? index % rowCount : index;
+        const int baseColumn = columnGroup * 2;
+
+        auto *label = new QLabel(tr(rows[index].label));
+        label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        m_fieldsLayout->addWidget(label, row, baseColumn);
+        m_fieldsLayout->addWidget(rows[index].field, row, baseColumn + 1);
+    }
+
+    m_fieldsLayout->setColumnStretch(0, 0);
+    m_fieldsLayout->setColumnStretch(1, 1);
+    m_fieldsLayout->setColumnStretch(2, 0);
+    m_fieldsLayout->setColumnStretch(3, 1);
+}
