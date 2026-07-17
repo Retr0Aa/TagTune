@@ -1,0 +1,7 @@
+[project]
+name = "tagtune"
+version = "1.0.0"
+dependencies = [
+    "PySide6",
+    "mutagen"
+]

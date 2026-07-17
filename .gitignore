@@ -1,5 +1,49 @@
-/cmake-build-debug
-/out
+# Virtual environments
+.venv/
+venv/
+env/
 
-.idea
-.vs
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build output
+build/
+dist/
+*.spec
+
+# Installer artifacts
+*.dmg
+*.pkg
+.pyinstaller/
+
+# IDEs
+.idea/
+.vscode/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Test/cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+vendor/
+
+# Packaging
+*.egg-info/
+.eggs/
+
+# Environment variables
+.env
+.env.*
+
+# Qt
+*.qmlc
+*.jsc

@@ -1,39 +1,60 @@
 # TagTune
 
-An audio metadata manager UI.
+## Packaging for Production
 
-## Features
-- Top table for loaded songs
-- Bottom tag editor for the selected file
-- Cover art preview
-- Direct in-file metadata editing with TagLib
-- Open files or entire folders for batch loading
-- Recent files and folders menu
-- Save shortcut for the currently selected track
-- Native macOS menu bar integration
+Use the `.icns` file in `resources/icons` when building the macOS app bundle. The PNG stays the runtime icon for Windows and Linux.
 
-## Supported formats
-- MP3
-- FLAC
-- M4A / MP4
-- WAV and OGG when the tag backend supports them
-
-## Build
+### 1. Install PyInstaller
 ```bash
-cmake -S . -B build
-cmake --build build
+python3 -m pip install pyinstaller
 ```
 
-## Run
+### 2. Build the `.app` and `.dmg`
+Run the helper script from the project root on macOS:
 ```bash
-./build/TagTune
+./scripts/build_macos.sh
 ```
+
+If your shell says permission denied, make it executable once:
+```bash
+chmod +x scripts/build_macos.sh
+```
+
+The script:
+- finds the `.icns` file in `resources/icons`
+- clears old `build/` and `dist/` output
+- builds `dist/TagTune.app`
+- packages `dist/TagTune.dmg`
+
+### 3. Manual fallback
+If you want to do it by hand, the script runs the equivalent of:
+```bash
+pyinstaller \
+  --clean \
+  --noconfirm \
+  --windowed \
+  --name TagTune \
+  --icon "$(find resources/icons -maxdepth 1 -name '*.icns' | head -n 1)" \
+  --add-data "resources/icons:resources/icons" \
+  --collect-all PySide6 \
+  --hidden-import mutagen \
+  main.py
+```
+
+Then create the DMG:
+```bash
+hdiutil create \
+  -volname TagTune \
+  -srcfolder dist/TagTune.app \
+  -ov \
+  -format UDZO \
+  dist/TagTune.dmg
+```
+
+### 4. Verify the result
+- Open `dist/TagTune.app` and confirm the icon appears in Finder and the Dock.
+- Mount `dist/TagTune.dmg` and confirm the app launches correctly.
 
 ## Notes
-The editor writes metadata directly into the audio file rather than using JSON sidecar files.
-
-On macOS, the app uses the native global menu bar and keeps file actions there instead of duplicating them in a second top toolbar.
-
-Recent paths are stored with `QSettings`, so they persist between launches.
-
-
+- The app uses the `.icns` file on macOS and the PNG fallback on other platforms.
+- For Windows builds, use the same PyInstaller flow, but keep the PNG icon and adjust `--add-data` path separators if needed.
