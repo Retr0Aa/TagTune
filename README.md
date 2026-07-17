@@ -1,5 +1,39 @@
 # TagTune
 
+## Building and Running
+
+To run TagTune, follow the commands below to create an environment, install dependencies, and start the app.
+
+### 1. Open a terminal in the project root
+```bash
+cd /path/to/TagTune
+```
+
+### 2. Create a virtual environment
+```bash
+python3 -m venv .venv
+```
+
+### 3. Activate the virtual environment
+```bash
+source .venv/bin/activate
+```
+
+### 4. Upgrade pip
+```bash
+python -m pip install --upgrade pip
+```
+
+### 5. Install the project dependencies
+```bash
+python -m pip install -r requirements.txt
+```
+
+### 6. Run TagTune
+```bash
+python main.py
+```
+
 ## Packaging for Production
 
 Use the `.icns` file in `resources/icons` when building the macOS app bundle. The PNG stays the runtime icon for Windows and Linux.
