@@ -19,6 +19,11 @@ python3 -m venv .venv
 source .venv/bin/activate
 ```
 
+On Windows:
+```bash
+.venv\Scripts\activate
+```
+
 ### 4. Upgrade pip
 ```bash
 python -m pip install --upgrade pip
