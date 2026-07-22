@@ -39,6 +39,13 @@ mkdir -p "$PYINSTALLER_CONFIG_DIR/specs"
 
 APP_BUNDLE="dist/${APP_NAME}.app"
 DMG_PATH="dist/${APP_NAME}.dmg"
+DMG_STAGING_DIR="$(mktemp -d "$ROOT_DIR/.dmg-staging.XXXXXX")"
+
+cleanup() {
+    rm -rf "$DMG_STAGING_DIR"
+}
+
+trap cleanup EXIT INT TERM
 
 if [ ! -d "$APP_BUNDLE" ]; then
     echo "PyInstaller did not produce $APP_BUNDLE" >&2
@@ -46,9 +53,11 @@ if [ ! -d "$APP_BUNDLE" ]; then
 fi
 
 rm -f "$DMG_PATH"
+cp -R "$APP_BUNDLE" "$DMG_STAGING_DIR/"
+ln -s /Applications "$DMG_STAGING_DIR/Applications"
 hdiutil create \
     -volname "$APP_NAME" \
-    -srcfolder "$APP_BUNDLE" \
+    -srcfolder "$DMG_STAGING_DIR" \
     -ov \
     -format UDZO \
     "$DMG_PATH"
