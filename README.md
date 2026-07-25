@@ -41,6 +41,33 @@ python main.py
 
 ## Packaging for Production
 
+### Windows .exe installer
+
+Build a Windows installer executable for TagTune.
+
+#### 1. Install packaging dependencies
+```powershell
+python -m pip install pyinstaller
+```
+
+Install Inno Setup 6 if you want the Windows installer executable:
+- https://jrsoftware.org/isinfo.php
+
+#### 2. Build the app and installer
+Run the helper script from the project root on Windows:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
+```
+
+The script:
+- clears old `build/` and `dist/` output
+- builds `dist/TagTune` with PyInstaller
+- packages `dist/TagTune-1.0.0-Setup.exe` with Inno Setup when `ISCC.exe` is available
+
+#### 3. Verify the result
+- Run `dist/TagTune-1.0.0-Setup.exe` and complete installation.
+- Launch TagTune from the Start Menu or desktop shortcut.
+
 ### macOS .dmg
 
 Use the `.icns` file in `resources/icons` when building the macOS app bundle. The PNG stays the runtime icon for Windows and Linux.

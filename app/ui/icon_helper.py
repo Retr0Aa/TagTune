@@ -14,6 +14,10 @@ def app_icon() -> QIcon:
 
     icons_dir = root / 'resources' / 'icons'
 
+    ico_files = sorted(icons_dir.glob('*.ico'))
+    if ico_files:
+        return QIcon(str(ico_files[0]))
+
     if sys.platform == 'darwin':
         icns_files = sorted(icons_dir.glob('*.icns'))
         if icns_files:
