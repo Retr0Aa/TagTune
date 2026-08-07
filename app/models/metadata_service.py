@@ -69,29 +69,29 @@ class MetadataService:
 
     def _blank_track(self, file_path: str) -> Track:
         info = QFileInfo(file_path)
-        base_name = info.baseName().strip() or "Unknown Track"
+        base_name = info.baseName().strip() or ""
         return Track(
             filePath=file_path,
             title=base_name,
-            artist="Unknown Artist",
-            album="Unknown Album",
-            albumArtist="Unknown Artist",
-            genre="Unknown",
+            artist="",
+            album="",
+            albumArtist="",
+            genre="",
             year=str(QDate.currentDate().year()),
         )
 
     def _apply_defaults(self, track: Track) -> Track:
         info = QFileInfo(track.filePath)
         if not track.title.strip():
-            track.title = info.baseName() or "Unknown Track"
+            track.title = info.baseName() or ""
         if not track.artist.strip():
-            track.artist = "Unknown Artist"
+            track.artist = ""
         if not track.album.strip():
-            track.album = "Unknown Album"
+            track.album = ""
         if not track.albumArtist.strip():
-            track.albumArtist = "Unknown Artist"
+            track.albumArtist = ""
         if not track.genre.strip():
-            track.genre = "Unknown"
+            track.genre = ""
         if not track.year.strip():
             track.year = str(QDate.currentDate().year())
         return track

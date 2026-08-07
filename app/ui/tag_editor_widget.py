@@ -57,10 +57,13 @@ class TagEditorWidget(QWidget):
         self._file_label.setWordWrap(True)
 
         self._cover_button = QPushButton("Load Cover")
+        self._remove_cover_button = QPushButton("Remove Cover")
+        self._remove_cover_button.setEnabled(False)
 
         cover_column.addWidget(self._cover_label, 0, Qt.AlignmentFlag.AlignLeft)
         cover_column.addWidget(self._file_label)
         cover_column.addWidget(self._cover_button)
+        cover_column.addWidget(self._remove_cover_button)
         cover_column.addStretch()
 
         self._fields_container = QWidget()
@@ -113,6 +116,7 @@ class TagEditorWidget(QWidget):
 
         self._save_button.clicked.connect(self._on_save_clicked)
         self._cover_button.clicked.connect(self._on_load_cover_clicked)
+        self._remove_cover_button.clicked.connect(self._on_remove_cover_clicked)
 
         self._rebuild_field_layout()
 
@@ -138,6 +142,7 @@ class TagEditorWidget(QWidget):
         self._disc_spin.setValue(0)
         self._bpm_spin.setValue(0)
         self._set_empty_cover()
+        self._remove_cover_button.setEnabled(False)
 
     def setEditingEnabled(self, enabled: bool) -> None:
         for widget in (
@@ -156,6 +161,7 @@ class TagEditorWidget(QWidget):
             self._bpm_spin,
             self._save_button,
             self._cover_button,
+            self._remove_cover_button,
         ):
             widget.setEnabled(enabled)
 
@@ -182,6 +188,13 @@ class TagEditorWidget(QWidget):
 
         self._track.coverArt = pixmap
         self._set_cover_pixmap(pixmap)
+        self._remove_cover_button.setEnabled(True)
+        self.coverRequested.emit()
+
+    def _on_remove_cover_clicked(self) -> None:
+        self._track.coverArt = None
+        self._set_empty_cover()
+        self._remove_cover_button.setEnabled(False)
         self.coverRequested.emit()
 
     def _apply_track(self, track: Track) -> None:
@@ -200,8 +213,10 @@ class TagEditorWidget(QWidget):
 
         if track.coverArt is None or track.coverArt.isNull():
             self._set_empty_cover()
+            self._remove_cover_button.setEnabled(False)
         else:
             self._set_cover_pixmap(track.coverArt)
+            self._remove_cover_button.setEnabled(True)
 
     def _collect_track(self) -> Track:
         updated = self._track
