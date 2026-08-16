@@ -41,6 +41,33 @@ python main.py
 
 ## Packaging for Production
 
+### GitHub Actions
+> [!NOTE]
+> This is the preferred way for building your own TagTune artifacts
+
+The repository includes a release workflow at [`.github/workflows/build-installers.yml`](.github/workflows/build-installers.yml). It can build each platform on its matching runner and publish the resulting files as artifacts and a GitHub Release.
+
+#### How to run it
+You can either push a tag that starts with `v`, or run the workflow manually from the Actions tab.
+
+Tag example:
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+#### Platform builds
+- Windows x64 runs on `windows-latest` and produces `TagTune-<version>-Setup.exe`.
+- Ubuntu x64 runs on `ubuntu-latest` and produces `TagTune-<version>-x86_64.AppImage`.
+- Ubuntu arm64 runs on `ubuntu-24.04-arm` and produces `TagTune-<version>-aarch64.AppImage`.
+- macOS arm64 runs on `macos-14` and produces `TagTune-<version>.dmg` plus `TagTune.app`.
+
+#### What the workflow does
+- installs the project dependencies for each job
+- runs the existing platform build script for that operating system
+- uploads the build outputs as workflow artifacts
+- creates a GitHub Release for tag builds and attaches the same files
+
 ### Windows .exe installer
 
 Build a Windows installer executable for TagTune.
@@ -100,36 +127,6 @@ The script:
 
 #### Notes
 - The app uses the `.icns` file on macOS and the PNG fallback on other platforms.
-
-### GitHub Actions
-
-The repository includes a release workflow at [`.github/workflows/build-installers.yml`](.github/workflows/build-installers.yml). It can build each platform on its matching runner and publish the resulting files as artifacts and a GitHub Release.
-
-#### How to run it
-You can either push a tag that starts with `v`, or run the workflow manually from the Actions tab.
-
-Tag example:
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-#### Platform builds
-- Windows x64 runs on `windows-latest` and produces `TagTune-<version>-Setup.exe`.
-- Ubuntu x64 runs on `ubuntu-latest` and produces `TagTune-<version>-x86_64.AppImage`.
-- Ubuntu arm64 runs on `ubuntu-24.04-arm` and produces `TagTune-<version>-aarch64.AppImage`.
-- macOS arm64 runs on `macos-14` and produces `TagTune-<version>.dmg` plus `TagTune.app`.
-
-#### What the workflow does
-- installs the project dependencies for each job
-- runs the existing platform build script for that operating system
-- uploads the build outputs as workflow artifacts
-- creates a GitHub Release for tag builds and attaches the same files
-
-#### Notes
-- The workflow uses the git tag as the version source.
-- Ubuntu arm64 requires a native arm64 Linux runner in GitHub Actions.
-- Code signing and notarization are not part of this workflow yet.
 
 ### Linux .AppImage
 
