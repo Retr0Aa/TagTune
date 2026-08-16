@@ -192,4 +192,4 @@ jobs:
             files+=("$file")
           done < <(find release-artifacts -type f -print0)
 
-          gh release create "$GITHUB_REF_NAME" "${files[@]}" --generate-notes
+          gh release create "$GITHUB_REF_NAME" "${files[@]}" --generate-notes --repo "$GH_REPO"
