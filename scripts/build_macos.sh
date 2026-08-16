@@ -5,6 +5,7 @@ ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
 APP_NAME="TagTune"
+APP_VERSION="${APP_VERSION:-1.0.0}"
 ICON_PATH="$(find "$ROOT_DIR/resources/icons" -maxdepth 1 -name '*.icns' | head -n 1)"
 VENDOR_DIR="$ROOT_DIR/vendor"
 ICONS_DIR="$ROOT_DIR/resources/icons"
@@ -38,7 +39,7 @@ mkdir -p "$PYINSTALLER_CONFIG_DIR/specs"
     main.py
 
 APP_BUNDLE="dist/${APP_NAME}.app"
-DMG_PATH="dist/${APP_NAME}.dmg"
+DMG_PATH="dist/${APP_NAME}-${APP_VERSION}.dmg"
 DMG_STAGING_DIR="$(mktemp -d "$ROOT_DIR/.dmg-staging.XXXXXX")"
 
 cleanup() {

@@ -4,7 +4,10 @@ $ROOT_DIR = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $ROOT_DIR
 
 $APP_NAME = "TagTune"
-$APP_VERSION = "1.0.0"
+$APP_VERSION = $env:APP_VERSION
+if ([string]::IsNullOrWhiteSpace($APP_VERSION)) {
+    $APP_VERSION = "1.0.0"
+}
 $ICONS_DIR = Join-Path $ROOT_DIR "resources/icons"
 $WINDOWS_ICON = Get-ChildItem -Path $ICONS_DIR -Filter "*.ico" -File -ErrorAction SilentlyContinue | Select-Object -First 1
 $PNG_ICON = Get-ChildItem -Path $ICONS_DIR -Filter "*.png" -File -ErrorAction SilentlyContinue | Select-Object -First 1
