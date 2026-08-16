@@ -42,7 +42,7 @@ python main.py
 ## Packaging for Production
 
 ### GitHub Actions
-> [!NOTE]
+> [!IMPORTANT]
 > This is the preferred way for building your own TagTune artifacts
 
 The repository includes a release workflow at [`.github/workflows/build-installers.yml`](.github/workflows/build-installers.yml). It can build each platform on its matching runner and publish the resulting files as artifacts and a GitHub Release.
@@ -125,8 +125,8 @@ The script:
 - Open `dist/TagTune.app` and confirm the icon appears in Finder and the Dock.
 - Mount `dist/TagTune.dmg` and confirm the app launches correctly.
 
-#### Notes
-- The app uses the `.icns` file on macOS and the PNG fallback on other platforms.
+> [!NOTE]
+> The app uses the `.icns` file on macOS and the PNG fallback on other platforms.
 
 ### Linux .AppImage
 
@@ -203,8 +203,8 @@ You can also:
 - Check that the TagTune icon appears in your desktop environment
 - Test music metadata editing functionality
 
-#### Notes
-- The AppImage is a self-contained executable that includes all dependencies
-- It works on most Linux distributions (glibc 2.29+)
-- The PNG icon is displayed in the application menu and window title
-- The AppImage can be distributed as a single file without requiring installation
+> [!NOTE]
+> - The AppImage is a self-contained executable that includes all dependencies
+> - It works on most Linux distributions (glibc 2.29+)
+> - The PNG icon is displayed in the application menu and window title
+> - The AppImage can be distributed as a single file without requiring installation
