@@ -159,9 +159,7 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: TagTune-macos-arm64
-          path: |
-            dist/TagTune.app
-            dist/TagTune-*.dmg
+          path: dist/TagTune-*.dmg
           if-no-files-found: error
 
   publish-release:
@@ -188,8 +186,19 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           files=()
+
           while IFS= read -r -d '' file; do
             files+=("$file")
-          done < <(find release-artifacts -type f -print0)
+          done < <(find release-artifacts -type f \( \
+            -name "*.exe" -o \
+            -name "*.AppImage" -o \
+            -name "*.dmg" \
+          \) -print0)
 
-          gh release create "$GITHUB_REF_NAME" "${files[@]}" --generate-notes --repo "$GH_REPO"
+          echo "Files to upload:"
+          printf '%s\n' "${files[@]}"
+
+          gh release create "$GITHUB_REF_NAME" \
+            "${files[@]}" \
+            --generate-notes \
+            --repo "$GH_REPO"
