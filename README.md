@@ -1,5 +1,7 @@
 # TagTune
 
+TagTune is audio metadata editor for audio files. Using it, you can easily manpulate, delete and edit tags such as, *Title*, *Cover art* and much more
+
 ## Building and Running
 
 To run TagTune, follow the commands below to create an environment, install dependencies, and start the app.
