@@ -12,6 +12,7 @@ permissions:
 jobs:
   build-windows-x64:
     runs-on: windows-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -31,26 +32,44 @@ jobs:
           & .\.venv\Scripts\python.exe -m pip install --upgrade pip
           & .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 
-      - name: Set version from tag
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Set version
         shell: pwsh
         run: |
-          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          if ("${{ github.ref }}" -like "refs/tags/*") {
+            $version = "${{ github.ref_name }}".TrimStart('v')
+          } else {
+            $version = "dev"
+          }
+
           "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Build Windows installer
         shell: pwsh
         run: .\scripts\build_windows.ps1
 
+      - name: Rename installer
+        shell: pwsh
+        run: |
+          $file = Get-ChildItem "dist/TagTune-*-Setup.exe" | Select-Object -First 1
+
+          if (-not $file) {
+            Write-Error "Windows installer not found."
+            exit 1
+          }
+
+          Rename-Item $file.FullName "TagTune-Windows-x64.exe"
+
       - name: Upload artifact
         uses: actions/upload-artifact@v5
         with:
           name: TagTune-windows-x64
-          path: dist/TagTune-*-Setup.exe
+          path: dist/TagTune-Windows-x64.exe
           if-no-files-found: error
+
 
   build-ubuntu-x64:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -73,24 +92,41 @@ jobs:
           .venv/bin/python -m pip install --upgrade pip
           .venv/bin/python -m pip install -r requirements.txt
 
-      - name: Set version from tag
-        if: startsWith(github.ref, 'refs/tags/')
-        run: echo "APP_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      - name: Set version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "APP_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          else
+            echo "APP_VERSION=dev" >> "$GITHUB_ENV"
+          fi
 
       - name: Build Linux AppImage
         env:
           APPIMAGE_ARCH: x86_64
         run: ./scripts/build_linux.sh
 
+      - name: Rename AppImage
+        run: |
+          file=$(find dist -maxdepth 1 -name "TagTune-*-x86_64.AppImage" -print -quit)
+
+          if [[ -z "$file" ]]; then
+            echo "Linux x64 AppImage not found."
+            exit 1
+          fi
+
+          mv "$file" dist/TagTune-Linux-x64.AppImage
+
       - name: Upload artifact
         uses: actions/upload-artifact@v5
         with:
           name: TagTune-ubuntu-x64
-          path: dist/TagTune-*-x86_64.AppImage
+          path: dist/TagTune-Linux-x64.AppImage
           if-no-files-found: error
+
 
   build-ubuntu-arm64:
     runs-on: ubuntu-24.04-arm
+
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -113,24 +149,41 @@ jobs:
           .venv/bin/python -m pip install --upgrade pip
           .venv/bin/python -m pip install -r requirements.txt
 
-      - name: Set version from tag
-        if: startsWith(github.ref, 'refs/tags/')
-        run: echo "APP_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      - name: Set version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "APP_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          else
+            echo "APP_VERSION=dev" >> "$GITHUB_ENV"
+          fi
 
       - name: Build Linux AppImage
         env:
           APPIMAGE_ARCH: aarch64
         run: ./scripts/build_linux.sh
 
+      - name: Rename AppImage
+        run: |
+          file=$(find dist -maxdepth 1 -name "TagTune-*-aarch64.AppImage" -print -quit)
+
+          if [[ -z "$file" ]]; then
+            echo "Linux ARM64 AppImage not found."
+            exit 1
+          fi
+
+          mv "$file" dist/TagTune-Linux-arm64.AppImage
+
       - name: Upload artifact
         uses: actions/upload-artifact@v5
         with:
           name: TagTune-ubuntu-arm64
-          path: dist/TagTune-*-aarch64.AppImage
+          path: dist/TagTune-Linux-arm64.AppImage
           if-no-files-found: error
+
 
   build-macos-arm64:
     runs-on: macos-14
+
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -148,28 +201,47 @@ jobs:
           .venv/bin/python -m pip install --upgrade pip
           .venv/bin/python -m pip install -r requirements.txt
 
-      - name: Set version from tag
-        if: startsWith(github.ref, 'refs/tags/')
-        run: echo "APP_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      - name: Set version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "APP_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          else
+            echo "APP_VERSION=dev" >> "$GITHUB_ENV"
+          fi
 
       - name: Build macOS DMG
         run: ./scripts/build_macos.sh
+
+      - name: Rename DMG
+        run: |
+          file=$(find dist -maxdepth 1 -name "TagTune-*.dmg" -print -quit)
+
+          if [[ -z "$file" ]]; then
+            echo "macOS DMG not found."
+            exit 1
+          fi
+
+          mv "$file" dist/TagTune-macOS-arm64.dmg
 
       - name: Upload artifact
         uses: actions/upload-artifact@v5
         with:
           name: TagTune-macos-arm64
-          path: dist/TagTune-*.dmg
+          path: dist/TagTune-macOS-arm64.dmg
           if-no-files-found: error
+
 
   publish-release:
     if: startsWith(github.ref, 'refs/tags/')
+
     needs:
       - build-windows-x64
       - build-ubuntu-x64
       - build-ubuntu-arm64
       - build-macos-arm64
+
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -184,16 +256,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+
         run: |
           files=()
 
           while IFS= read -r -d '' file; do
             files+=("$file")
-          done < <(find release-artifacts -type f \( \
-            -name "*.exe" -o \
-            -name "*.AppImage" -o \
-            -name "*.dmg" \
-          \) -print0)
+          done < <(
+            find release-artifacts -type f \( \
+              -name "*.exe" -o \
+              -name "*.AppImage" -o \
+              -name "*.dmg" \
+            \) -print0
+          )
+
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No release files found."
+            exit 1
+          fi
 
           echo "Files to upload:"
           printf '%s\n' "${files[@]}"
