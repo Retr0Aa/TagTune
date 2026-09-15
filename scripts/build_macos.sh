@@ -52,9 +52,31 @@ if [ ! -d "$APP_BUNDLE" ]; then
     exit 1
 fi
 
+echo "Signing $APP_BUNDLE with an ad-hoc signature..."
+
+codesign \
+    --force \
+    --deep \
+    --sign - \
+    "$APP_BUNDLE"
+
+echo "Verifying ad-hoc signature..."
+
+codesign \
+    --verify \
+    --deep \
+    --strict \
+    --verbose=2 \
+    "$APP_BUNDLE"
+
+echo "Ad-hoc signature verified successfully."
+
 rm -f "$DMG_PATH"
+
 cp -R "$APP_BUNDLE" "$DMG_STAGING_DIR/"
+
 ln -s /Applications "$DMG_STAGING_DIR/Applications"
+
 hdiutil create \
     -volname "$APP_NAME" \
     -srcfolder "$DMG_STAGING_DIR" \
