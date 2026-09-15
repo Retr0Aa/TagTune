@@ -34,7 +34,6 @@ mkdir -p "$PYINSTALLER_CONFIG_DIR/specs"
     --paths "$VENDOR_DIR" \
     --specpath "$PYINSTALLER_CONFIG_DIR/specs" \
     --add-data "$ICONS_DIR:resources/icons" \
-    --collect-all PySide6 \
     --hidden-import mutagen \
     main.py
 
